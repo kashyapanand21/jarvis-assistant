@@ -55,7 +55,8 @@ def speak(text):
 
 
 def googleProcess(command: str) -> str:
-    client = genai.Client(api_key="AIzaSyAxXoj8cYx_yYb0-AktHUpQs0cUlZedAmQ")
+    client = genai.Client(api_key="")
+    # Api key is removed to protect it from being exhausted
 
     prompt = f"""
     You are Jarvis, a helpful virtual assistant.
@@ -122,7 +123,7 @@ if __name__ == "__main__":
         try:
             with sr.Microphone() as source:
                 if not jarvis_active:
-                    print("Listening for wake word 'hello'...")  # ← NEW
+                    print("Listening for wake word 'jarvis'...")  # ← NEW
                 else:
                     print("Jarvis Active - Listening for command...")  # ← NEW
                 
@@ -131,7 +132,7 @@ if __name__ == "__main__":
             print(f"Recognized: {word}")  # ← Changed to show what was recognized
 
             # Check if wake word is spoken
-            if word.lower() == "hello":
+            if word.lower() == "jarvis":
                 if not jarvis_active:
                     # Activate Jarvis
                     jarvis_active = True

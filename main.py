@@ -10,22 +10,26 @@ import pygame
 import os
 import tempfile
 
+
+# Initialize Pygame Mixer globally to reduce latency
+pygame.mixer.init()
+
+# Secure API Keys from Environment Variables
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
+GENAI_API_KEY = os.environ.get("GENAI_API_KEY")
+
 recognizer = sr.Recognizer() # to recognize voice
 engine = pyttsx3.init() # to initialize the ttsx engine
-newsapi = "73a662d2c64041e6b976111613884e71"
+
 
 # def speak(text):
-#     engine.say(text)
-#     engine.runAndWait()
-
-# def speak(text):
-#     engine = pyttsx3.init()   
 #     engine.say(text)
 #     engine.runAndWait()
 
 
 def speak(text):
     print(f"[Speaking]: {text}")
+    temp_file = None
     try:
         # Create temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as fp:
@@ -36,7 +40,6 @@ def speak(text):
         tts.save(temp_file)
         
         # Play audio
-        pygame.mixer.init()
         pygame.mixer.music.load(temp_file)
         pygame.mixer.music.play()
         
@@ -44,19 +47,27 @@ def speak(text):
         while pygame.mixer.music.get_busy():
             pygame.time.Clock().tick(10)
         
-        pygame.mixer.quit()
-        
-        # Clean up
-        os.unlink(temp_file)
-        time.sleep(0.3)
+        # Release the file lock so it can be deleted
+        pygame.mixer.music.unload()
         
     except Exception as e:
         print(f"TTS Error: {e}")
+        
+    finally:
+        # Clean up
+        if temp_file and os.path.exists(temp_file):
+            try:
+                os.unlink(temp_file)
+            except PermissionError:
+                pass # Handled by OS later or restart
+
+
 
 
 def googleProcess(command: str) -> str:
-    client = genai.Client(api_key="")
-    # Api key is removed to protect it from being exhausted
+    if not GENAI_API_KEY:
+        return "Gemini API Key not found."
+    client = genai.Client(api_key=GENAI_API_KEY)
 
     prompt = f"""
     You are Jarvis, a helpful virtual assistant.
@@ -81,14 +92,19 @@ def processCommand(c):
         webbrowser.open("https://youtube.com")
     elif "open linkedin" in c.lower():
         webbrowser.open("https://linkedin.com")
-    elif c.lower().startswith("play"):
-        song = c.lower().split(" ")[1]
-        # the split will convert it into a list
-        link = musicLibrary.music(song)
-        webbrowser.open(link)
+    elif c.lower().startswith("play "):
+        parts = c.lower().split(" ", 1)
+        if len(parts) > 1:
+            song = parts[1]
+            try:
+                link = musicLibrary.music(song)
+                webbrowser.open(link)
+            except Exception as e:
+                print(f"Music Error: {e}")
+                speak("I couldn't find that song.")
 
     elif "news" in c.lower():
-        r = requests.get(f"https://newsapi.org/v2/top-headlines?sources=bbc-news&apiKey={newsapi}")
+        r = requests.get(f"https://newsapi.org/v2/top-headlines?sources=bbc-news&apiKey={NEWS_API_KEY}")
         if r.status_code == 200:
             # it parse the JSON response
             data = r.json()
@@ -110,7 +126,7 @@ def processCommand(c):
 if __name__ == "__main__":
     speak("Initializing Jarvis")
     
-    jarvis_active = False  # ← NEW: Track if Jarvis is in active listening mode
+    orion_active = False  #if Jarvis is in active listening mode
     
     while True:
         #! Listen for the wake word "Jarvis"
@@ -122,60 +138,41 @@ if __name__ == "__main__":
 
         try:
             with sr.Microphone() as source:
-                if not jarvis_active:
-                    print("Listening for wake word 'jarvis'...")  # ← NEW
+                if not orion_active:
+                    print("Listening for wake word 'Jarvis'...")  
                 else:
-                    print("Jarvis Active - Listening for command...")  # ← NEW
+                    print("Jarvis Active - Listening for command...")  
                 
                 audio = recognizer.listen(source, timeout=3, phrase_time_limit=2)
             word = recognizer.recognize_google(audio)
-            print(f"Recognized: {word}")  # ← Changed to show what was recognized
+            print(f"Recognized: {word}")  
 
             # Check if wake word is spoken
-            if word.lower() == "jarvis":
-                if not jarvis_active:
-                    # Activate Jarvis
-                    jarvis_active = True
+            # Strip punctuation and whitespace for robust detection
+            word_clean = word.lower().strip(".,!? ")
+            if word_clean == "jarvis":
+                if not orion_active:
+                    # Activate jarvis
+                    orion_active = True
                     speak("Yes, I'm listening")
                 else:
-                    # Reset/restart Jarvis
-                    jarvis_active = False
+                    # Reset/restart jarvis
+                    orion_active = False
                     speak("Restarting")
                     time.sleep(0.5)
-                    jarvis_active = True
+                    orion_active = True
                     speak("Yes, I'm listening")
 
-            # If Jarvis is active and it's not the wake word, process as command
-            elif jarvis_active:
+            # If jarvis is active and it's not the wake word, process as command
+            elif orion_active:
                 processCommand(word)
-        
-            # with sr.Microphone() as source:
-            #     recognizer.adjust_for_ambient_noise(source, duration=1.2)
-            #     print("Listening for wake word...")
-            #     audio = recognizer.listen(source, timeout=3, phrase_time_limit=3)
-
-            # wake = recognizer.recognize_google(audio).lower()
-            # print("Heard:", wake)
-
-            # if wake == "namaste":
-            #     speak("Yaa...")  # This will run reliably now
-            #     with sr.Microphone() as source:
-            #         recognizer.adjust_for_ambient_noise(source, duration=1)
-            #         print("Assistant Active...")
-            #         audio = recognizer.listen(source, timeout=3, phrase_time_limit=5)
-
-            #         cmd = recognizer.recognize_google(audio)
-            #         print("Command:", cmd)
-            #         processCommand(cmd)
-
-
-
+                
         except sr.WaitTimeoutError:
             # Timeout - continue listening
             continue
         except sr.UnknownValueError:
             # Could not understand audio
-            if jarvis_active:
+            if orion_active:
                 print("Could not understand, please repeat")
             continue
         except Exception as e:
